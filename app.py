@@ -33,7 +33,9 @@ canvas_size = 500
 if "history" not in st.session_state:
     st.session_state.history = []
 
-# Convert hex to BGR
+# --- Helper Functions ---
+
+# Hex to BGR for OpenCV
 def hex_to_bgr(hex_color):
     hex_color = hex_color.lstrip("#")
     r = int(hex_color[0:2],16)
@@ -41,15 +43,13 @@ def hex_to_bgr(hex_color):
     b = int(hex_color[4:6],16)
     return (b,g,r)
 
-fill_bgr = hex_to_bgr(fill_color)
-border_bgr = hex_to_bgr(border_color)
-bg_bgr = hex_to_bgr(bg_color)
+# Create blank canvas with background color
+def create_canvas(bg_color, size=500):
+    canvas = np.ones((size, size, 3), np.uint8)
+    canvas[:] = bg_color
+    return canvas
 
-# Initialize canvas for this run
-canvas = np.ones((canvas_size, canvas_size, 3), np.uint8) * 255
-canvas[:] = bg_bgr  # fill background
-
-# --- Draw Rotated Rectangle ---
+# Draw rotated rectangle (used for rectangles and squares)
 def draw_rotated_rectangle(canvas, center, width, height, angle, fill_color, border_color, thickness):
     rect = ((center[0], center[1]), (width, height), angle)
     box = cv2.boxPoints(rect)
@@ -58,7 +58,7 @@ def draw_rotated_rectangle(canvas, center, width, height, angle, fill_color, bor
     cv2.fillPoly(canvas, [box], fill_color)
     return canvas
 
-# --- Draw Shape Function ---
+# Draw shapes on canvas
 def draw_shape_on_canvas(canvas, shape_info):
     s = shape_info
     shape_type = s["shape"]
@@ -79,10 +79,11 @@ def draw_shape_on_canvas(canvas, shape_info):
         cv2.circle(canvas, (pos_x, pos_y), size//2, border_bgr, thickness)
         cv2.circle(canvas, (pos_x, pos_y), size//2, fill_bgr, -1)
     elif shape_type == "Oval":
-        M = cv2.getRotationMatrix2D((pos_x,pos_y), rotation, 1)
+        # Create overlay for rotated ellipse
         overlay = np.zeros_like(canvas)
         cv2.ellipse(overlay, (pos_x,pos_y), (size//2, size//3), 0, 0, 360, fill_bgr, -1)
         cv2.ellipse(overlay, (pos_x,pos_y), (size//2, size//3), 0, 0, 360, border_bgr, thickness)
+        M = cv2.getRotationMatrix2D((pos_x,pos_y), rotation, 1)
         canvas = cv2.warpAffine(overlay, M, (canvas.shape[1], canvas.shape[0]), dst=canvas, borderMode=cv2.BORDER_TRANSPARENT)
     elif shape_type == "Triangle":
         pts = np.array([
@@ -97,16 +98,24 @@ def draw_shape_on_canvas(canvas, shape_info):
         cv2.fillPoly(canvas, [pts], fill_bgr)
     return canvas
 
-# --- Sidebar Buttons with unique keys ---
+# --- Sidebar Buttons ---
 add_shape_btn = st.sidebar.button("Add Shape", key="add_shape")
 undo_btn = st.sidebar.button("Undo Last", key="undo_last")
 clear_btn = st.sidebar.button("Clear Canvas", key="clear_canvas")
 
-# --- Redraw Canvas from History ---
+# --- Convert colors to BGR ---
+fill_bgr = hex_to_bgr(fill_color)
+border_bgr = hex_to_bgr(border_color)
+bg_bgr = hex_to_bgr(bg_color)
+
+# --- Redraw Canvas ---
+canvas = create_canvas(bg_bgr, canvas_size)
+
+# Draw previous shapes
 for s in st.session_state.history:
     canvas = draw_shape_on_canvas(canvas, s)
 
-# --- Live Preview of Current Shape ---
+# Draw live preview of current shape
 preview_shape = {
     "shape": shape,
     "position": (position_x, position_y),
@@ -120,15 +129,13 @@ preview_shape = {
 }
 canvas = draw_shape_on_canvas(canvas, preview_shape)
 
-# --- Handle Add Shape ---
+# --- Handle Add/Undo/Clear ---
 if add_shape_btn:
     st.session_state.history.append(preview_shape)
 
-# --- Handle Undo ---
 if undo_btn and st.session_state.history:
     st.session_state.history.pop()
 
-# --- Handle Clear Canvas ---
 if clear_btn:
     st.session_state.history = []
 
