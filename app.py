@@ -1,40 +1,66 @@
 import streamlit as st
 import numpy as np
 import cv2
+from PIL import Image
 
-st.title("Shape Drawer (Cloud Compatible)")
+st.set_page_config(page_title="Interactive Shape Drawer", layout="wide")
+st.title("🎨 Interactive Shape Drawer")
 
-# Canvas size
-width, height = 500, 500
+# --- Sidebar controls ---
+st.sidebar.header("Shape Options")
+shape = st.sidebar.selectbox("Select Shape", ["Rectangle", "Square", "Circle", "Oval", "Triangle"])
+fill_color = st.sidebar.color_picker("Pick Fill Color", "#0000FF")   # default blue
+border_color = st.sidebar.color_picker("Pick Border Color", "#FF0000") # default red
+border_thickness = st.sidebar.slider("Border Thickness", 1, 20, 5)
+size = st.sidebar.slider("Shape Size", 50, 400, 200)
+position_x = st.sidebar.slider("Position X", 0, 500, 250)
+position_y = st.sidebar.slider("Position Y", 0, 500, 250)
 
-# Create blank canvas
-def create_canvas():
-    return np.ones((height, width, 3), dtype=np.uint8) * 255
+# --- Convert hex to BGR for OpenCV ---
+def hex_to_bgr(hex_color):
+    hex_color = hex_color.lstrip("#")
+    r = int(hex_color[0:2], 16)
+    g = int(hex_color[2:4], 16)
+    b = int(hex_color[4:6], 16)
+    return (b, g, r)
 
-# Draw shapes function
-def draw_shape(canvas, shape):
-    shape = shape.lower()
-    if shape == "rectangle":
-        top_left, bottom_right = (100,100), (400,300)
-        cv2.rectangle(canvas, top_left, bottom_right, (0,0,255), 5)  # Red border
-        cv2.rectangle(canvas, top_left, bottom_right, (255,0,0), -1) # Blue fill
-    elif shape == "circle":
-        cv2.circle(canvas, (250,250), 100, (0,0,255), 5)
-        cv2.circle(canvas, (250,250), 100, (255,0,0), -1)
-    elif shape == "triangle":
-        pts = np.array([[250,100],[150,350],[350,350]], np.int32).reshape((-1,1,2))
-        cv2.polylines(canvas, [pts], True, (0,0,255), 5)
-        cv2.fillPoly(canvas, [pts], (255,0,0))
-    else:
-        st.warning("Shape not recognized!")
-    return canvas
+fill_bgr = hex_to_bgr(fill_color)
+border_bgr = hex_to_bgr(border_color)
 
-canvas = create_canvas()
+# --- Canvas setup ---
+canvas_size = 500
+canvas = np.ones((canvas_size, canvas_size, 3), dtype=np.uint8) * 255  # white canvas
 
-# User input
-shape_text = st.text_input("Enter a shape (rectangle/circle/triangle):")
-
+# --- Draw selected shape ---
 if st.button("Draw Shape"):
-    canvas = create_canvas()
-    canvas = draw_shape(canvas, shape_text)
+    canvas[:] = 255  # clear canvas
+    if shape == "Rectangle":
+        top_left = (position_x - size//2, position_y - size//2)
+        bottom_right = (position_x + size//2, position_y + size//2)
+        cv2.rectangle(canvas, top_left, bottom_right, border_bgr, border_thickness)
+        cv2.rectangle(canvas, top_left, bottom_right, fill_bgr, -1)
+    elif shape == "Square":
+        half = size//2
+        top_left = (position_x - half, position_y - half)
+        bottom_right = (position_x + half, position_y + half)
+        cv2.rectangle(canvas, top_left, bottom_right, border_bgr, border_thickness)
+        cv2.rectangle(canvas, top_left, bottom_right, fill_bgr, -1)
+    elif shape == "Circle":
+        cv2.circle(canvas, (position_x, position_y), size//2, border_bgr, border_thickness)
+        cv2.circle(canvas, (position_x, position_y), size//2, fill_bgr, -1)
+    elif shape == "Oval":
+        cv2.ellipse(canvas, (position_x, position_y), (size//2, size//3), 0, 0, 360, border_bgr, border_thickness)
+        cv2.ellipse(canvas, (position_x, position_y), (size//2, size//3), 0, 0, 360, fill_bgr, -1)
+    elif shape == "Triangle":
+        pts = np.array([
+            [position_x, position_y - size//2],
+            [position_x - size//2, position_y + size//2],
+            [position_x + size//2, position_y + size//2]
+        ], np.int32).reshape((-1,1,2))
+        cv2.polylines(canvas, [pts], True, border_bgr, border_thickness)
+        cv2.fillPoly(canvas, [pts], fill_bgr)
+    else:
+        st.warning("Shape not supported!")
+
+    # Show canvas
     st.image(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
