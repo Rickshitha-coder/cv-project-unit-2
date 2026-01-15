@@ -54,8 +54,8 @@ def draw_rotated_rectangle(canvas, center, width, height, angle, fill_color, bor
     rect = ((center[0], center[1]), (width, height), angle)
     box = cv2.boxPoints(rect)
     box = np.int0(box)
-    cv2.drawContours(canvas, [box], 0, border_color, thickness)
     cv2.fillPoly(canvas, [box], fill_color)
+    cv2.polylines(canvas, [box], True, border_color, thickness)
     return canvas
 
 # Draw shapes on canvas
@@ -76,15 +76,26 @@ def draw_shape_on_canvas(canvas, shape_info):
     elif shape_type == "Square":
         canvas = draw_rotated_rectangle(canvas, (pos_x,pos_y), size, size, rotation, fill_bgr, border_bgr, thickness)
     elif shape_type == "Circle":
-        cv2.circle(canvas, (pos_x, pos_y), size//2, border_bgr, thickness)
         cv2.circle(canvas, (pos_x, pos_y), size//2, fill_bgr, -1)
+        cv2.circle(canvas, (pos_x, pos_y), size//2, border_bgr, thickness)
     elif shape_type == "Oval":
         # Create overlay for rotated ellipse
         overlay = np.zeros_like(canvas)
         cv2.ellipse(overlay, (pos_x,pos_y), (size//2, size//3), 0, 0, 360, fill_bgr, -1)
         cv2.ellipse(overlay, (pos_x,pos_y), (size//2, size//3), 0, 0, 360, border_bgr, thickness)
+
+        # Rotate overlay
         M = cv2.getRotationMatrix2D((pos_x,pos_y), rotation, 1)
-        canvas = cv2.warpAffine(overlay, M, (canvas.shape[1], canvas.shape[0]), dst=canvas, borderMode=cv2.BORDER_TRANSPARENT)
+        rotated_overlay = cv2.warpAffine(overlay, M, (canvas.shape[1], canvas.shape[0]))
+
+        # Create mask for overlay
+        mask = cv2.cvtColor(rotated_overlay, cv2.COLOR_BGR2GRAY)
+        _, mask = cv2.threshold(mask, 1, 255, cv2.THRESH_BINARY)
+
+        # Combine overlay with canvas
+        canvas = cv2.bitwise_and(canvas, canvas, mask=cv2.bitwise_not(mask))
+        canvas = cv2.add(canvas, rotated_overlay)
+
     elif shape_type == "Triangle":
         pts = np.array([
             [pos_x, pos_y - size//2],
@@ -94,8 +105,8 @@ def draw_shape_on_canvas(canvas, shape_info):
         rot_matrix = cv2.getRotationMatrix2D((pos_x,pos_y), rotation, 1)
         pts = cv2.transform(np.array([pts]), rot_matrix)[0]
         pts = pts.astype(np.int32).reshape((-1,1,2))
-        cv2.polylines(canvas, [pts], True, border_bgr, thickness)
         cv2.fillPoly(canvas, [pts], fill_bgr)
+        cv2.polylines(canvas, [pts], True, border_bgr, thickness)
     return canvas
 
 # --- Sidebar Buttons ---
