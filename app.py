@@ -1,76 +1,60 @@
-import cv2
-import numpy as np
 import streamlit as st
+import numpy as np
+import cv2
 from PIL import Image
+import speech_recognition as sr
 
-st.set_page_config(page_title="Shape Detection App", layout="wide")
-st.title("🖌 Interactive Shape Detection & Drawing")
+st.title("Shape Drawer with Voice & Text")
 
-# Sidebar for input options
-st.sidebar.header("Input Options")
-input_mode = st.sidebar.radio("Select Input Type", ["Upload Image", "Use Webcam"])
+# Canvas size
+width, height = 500, 500
 
-def detect_shapes(img):
-    # Convert to grayscale
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5,5), 0)
-    
-    # Edge detection
-    edges = cv2.Canny(blur, 50, 150)
-    
-    # Find contours
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    for cnt in contours:
-        # Approximate contour
-        epsilon = 0.02 * cv2.arcLength(cnt, True)
-        approx = cv2.approxPolyDP(cnt, epsilon, True)
-        
-        # Get bounding box for text
-        x, y, w, h = cv2.boundingRect(approx)
-        
-        # Identify shape
-        if len(approx) == 3:
-            shape_name = "Triangle"
-        elif len(approx) == 4:
-            aspect_ratio = w / float(h)
-            shape_name = "Square" if 0.95 <= aspect_ratio <= 1.05 else "Rectangle"
-        elif len(approx) == 5:
-            shape_name = "Pentagon"
-        else:
-            shape_name = "Circle"
-        
-        # Draw contour and label
-        cv2.drawContours(img, [approx], -1, (0, 255, 0), 3)
-        cv2.putText(img, shape_name, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,0,0), 2)
-    
-    return img
+# Initialize white canvas
+def create_canvas():
+    return np.ones((height, width, 3), dtype=np.uint8) * 255
 
-if input_mode == "Upload Image":
-    uploaded_file = st.file_uploader("Choose an image...", type=["png","jpg","jpeg"])
-    if uploaded_file is not None:
-        # Convert to OpenCV format
-        image = Image.open(uploaded_file)
-        img = np.array(image)
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        
-        result_img = detect_shapes(img)
-        # Convert back to RGB for Streamlit display
-        result_img = cv2.cvtColor(result_img, cv2.COLOR_BGR2RGB)
-        st.image(result_img, caption="Detected Shapes", use_column_width=True)
+canvas = create_canvas()
 
-elif input_mode == "Use Webcam":
-    stframe = st.empty()
-    run = st.button("Start Webcam")
-    cap = cv2.VideoCapture(0)
-    
-    if run:
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                st.warning("Failed to grab frame.")
-                break
-            frame = detect_shapes(frame)
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            stframe.image(frame, channels="RGB")
-    cap.release()
+# Draw shapes function
+def draw_shape(canvas, shape):
+    shape = shape.lower()
+    if shape == "rectangle":
+        top_left = (100, 100)
+        bottom_right = (400, 300)
+        cv2.rectangle(canvas, top_left, bottom_right, (0, 0, 255), 5)  # red border
+        cv2.rectangle(canvas, top_left, bottom_right, (255, 0, 0), -1) # blue fill
+    elif shape == "circle":
+        center = (250, 250)
+        radius = 100
+        cv2.circle(canvas, center, radius, (0,0,255), 5)
+        cv2.circle(canvas, center, radius, (255,0,0), -1)
+    elif shape == "triangle":
+        pts = np.array([[250,100],[150,350],[350,350]], np.int32)
+        pts = pts.reshape((-1,1,2))
+        cv2.polylines(canvas, [pts], isClosed=True, color=(0,0,255), thickness=5)
+        cv2.fillPoly(canvas, [pts], color=(255,0,0))
+    else:
+        st.warning("Shape not recognized!")
+    return canvas
+
+# --- Option 1: Text input ---
+shape_text = st.text_input("Enter a shape (rectangle/circle/triangle)")
+if st.button("Draw Shape"):
+    canvas = create_canvas()
+    canvas = draw_shape(canvas, shape_text)
+    st.image(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
+
+# --- Option 2: Voice input ---
+if st.button("Draw Shape via Voice"):
+    r = sr.Recognizer()
+    with sr.Microphone() as source:
+        st.info("Listening... Please speak now")
+        audio = r.listen(source, phrase_time_limit=3)
+        try:
+            voice_shape = r.recognize_google(audio)
+            st.success(f"You said: {voice_shape}")
+            canvas = create_canvas()
+            canvas = draw_shape(canvas, voice_shape)
+            st.image(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
+        except:
+            st.error("Could not recognize audio. Try again.")
