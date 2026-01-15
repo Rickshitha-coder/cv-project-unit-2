@@ -4,8 +4,8 @@ import cv2
 from PIL import Image
 import io
 
-st.set_page_config(page_title="🎨 Streamlit Paint Pro", layout="wide")
-st.title("🎨 Streamlit Mini Paint App Pro – Live Preview & Move Shapes")
+st.set_page_config(page_title="🎨 SPaint Pro", layout="wide")
+st.title("🎨 Mini Paint App Pro – Live Preview & Move Shapes")
 
 # --- Sidebar Controls ---
 st.sidebar.header("Shape Controls")
