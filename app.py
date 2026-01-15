@@ -5,7 +5,7 @@ from PIL import Image
 import io
 
 st.set_page_config(page_title="🎨 Streamlit Paint Pro", layout="wide")
-st.title("🎨 Streamlit Mini Paint App Pro – Rotatable Shapes")
+st.title("🎨 Streamlit Mini Paint App Pro – Live Preview & Move Shapes")
 
 # --- Sidebar Controls ---
 st.sidebar.header("Shape Controls")
@@ -79,7 +79,6 @@ def draw_shape_on_canvas(canvas, shape_info):
         cv2.circle(canvas, (pos_x, pos_y), size//2, border_bgr, thickness)
         cv2.circle(canvas, (pos_x, pos_y), size//2, fill_bgr, -1)
     elif shape_type == "Oval":
-        # rotate ellipse by rotation angle
         M = cv2.getRotationMatrix2D((pos_x,pos_y), rotation, 1)
         overlay = np.zeros_like(canvas)
         cv2.ellipse(overlay, (pos_x,pos_y), (size//2, size//3), 0, 0, 360, fill_bgr, -1)
@@ -91,7 +90,6 @@ def draw_shape_on_canvas(canvas, shape_info):
             [pos_x - size//2, pos_y + size//2],
             [pos_x + size//2, pos_y + size//2]
         ], np.float32)
-        # Rotation
         rot_matrix = cv2.getRotationMatrix2D((pos_x,pos_y), rotation, 1)
         pts = cv2.transform(np.array([pts]), rot_matrix)[0]
         pts = pts.astype(np.int32).reshape((-1,1,2))
@@ -104,20 +102,27 @@ add_shape_btn = st.sidebar.button("Add Shape", key="add_shape")
 undo_btn = st.sidebar.button("Undo Last", key="undo_last")
 clear_btn = st.sidebar.button("Clear Canvas", key="clear_canvas")
 
+# --- Redraw Canvas from History ---
+for s in st.session_state.history:
+    canvas = draw_shape_on_canvas(canvas, s)
+
+# --- Live Preview of Current Shape ---
+preview_shape = {
+    "shape": shape,
+    "position": (position_x, position_y),
+    "size": size,
+    "rect_w": rect_width,
+    "rect_h": rect_height,
+    "fill": fill_bgr,
+    "border": border_bgr,
+    "thickness": border_thickness,
+    "rotation": rotation_angle
+}
+canvas = draw_shape_on_canvas(canvas, preview_shape)
+
 # --- Handle Add Shape ---
 if add_shape_btn:
-    shape_info = {
-        "shape": shape,
-        "position": (position_x, position_y),
-        "size": size,
-        "rect_w": rect_width,
-        "rect_h": rect_height,
-        "fill": fill_bgr,
-        "border": border_bgr,
-        "thickness": border_thickness,
-        "rotation": rotation_angle
-    }
-    st.session_state.history.append(shape_info)
+    st.session_state.history.append(preview_shape)
 
 # --- Handle Undo ---
 if undo_btn and st.session_state.history:
@@ -126,10 +131,6 @@ if undo_btn and st.session_state.history:
 # --- Handle Clear Canvas ---
 if clear_btn:
     st.session_state.history = []
-
-# --- Redraw Canvas from History ---
-for s in st.session_state.history:
-    canvas = draw_shape_on_canvas(canvas, s)
 
 # --- Display Canvas ---
 st.image(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB), use_column_width=True)
