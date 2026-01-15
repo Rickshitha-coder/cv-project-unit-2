@@ -1,4 +1,6 @@
-streamlit
-opencv-python-headless
-numpy
-Pillow
+streamlit==1.30.0
+numpy==1.26.0
+opencv-python==4.8.1.78
+Pillow==10.3.0
+SpeechRecognition==3.9.0
+PyAudio==0.2.13
