@@ -1,94 +1,76 @@
-import streamlit as st
 import cv2
 import numpy as np
+import streamlit as st
+from PIL import Image
 
-st.set_page_config(page_title="Virtual Paint (Cloud-Compatible)", layout="wide")
-st.title("🎨 Virtual Paint Application (Video Upload Version)")
-st.markdown("Upload a video and draw in air using a colored object (blue marker recommended).")
+st.set_page_config(page_title="Shape Detection App", layout="wide")
+st.title("🖌 Interactive Shape Detection & Drawing")
 
-# Sidebar controls
-st.sidebar.header("Controls")
-color_option = st.sidebar.selectbox(
-    "Brush Color",
-    ("Blue", "Green", "Red", "Yellow")
-)
-clear_canvas = st.sidebar.button("Clear Canvas")
+# Sidebar for input options
+st.sidebar.header("Input Options")
+input_mode = st.sidebar.radio("Select Input Type", ["Upload Image", "Use Webcam"])
 
-# Color mapping
-color_map = {
-    "Blue": (255, 0, 0),
-    "Green": (0, 255, 0),
-    "Red": (0, 0, 255),
-    "Yellow": (0, 255, 255)
-}
-draw_color = color_map[color_option]
-
-# File uploader
-uploaded_file = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
-
-if uploaded_file is not None:
-    st.info("Processing video. Please wait...")
+def detect_shapes(img):
+    # Convert to grayscale
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (5,5), 0)
     
-    # Read video frames
-    tfile = uploaded_file
-    cap = cv2.VideoCapture(tfile.name if hasattr(tfile, 'name') else uploaded_file)
+    # Edge detection
+    edges = cv2.Canny(blur, 50, 150)
     
-    canvas = None
-    prev_x, prev_y = 0, 0
-
-    stframe = st.empty()
-
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        frame = cv2.flip(frame, 1)  # Flip for natural orientation
-
-        if canvas is None:
-            canvas = np.zeros_like(frame)
-
-        if clear_canvas:
-            canvas = np.zeros_like(frame)
-
-        # Convert to HSV
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-
-        # HSV range for BLUE object
-        lower_color = np.array([100, 150, 50])
-        upper_color = np.array([140, 255, 255])
-        mask = cv2.inRange(hsv, lower_color, upper_color)
-
-        # Remove noise
-        mask = cv2.erode(mask, None, iterations=2)
-        mask = cv2.dilate(mask, None, iterations=2)
-
-        # Find contours
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        if contours:
-            c = max(contours, key=cv2.contourArea)
-            if cv2.contourArea(c) > 500:
-                x, y, w, h = cv2.boundingRect(c)
-                cx = x + w // 2
-                cy = y + h // 2
-
-                if prev_x == 0 and prev_y == 0:
-                    prev_x, prev_y = cx, cy
-
-                # Draw line
-                cv2.line(canvas, (prev_x, prev_y), (cx, cy), draw_color, 5)
-                prev_x, prev_y = cx, cy
+    # Find contours
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    for cnt in contours:
+        # Approximate contour
+        epsilon = 0.02 * cv2.arcLength(cnt, True)
+        approx = cv2.approxPolyDP(cnt, epsilon, True)
+        
+        # Get bounding box for text
+        x, y, w, h = cv2.boundingRect(approx)
+        
+        # Identify shape
+        if len(approx) == 3:
+            shape_name = "Triangle"
+        elif len(approx) == 4:
+            aspect_ratio = w / float(h)
+            shape_name = "Square" if 0.95 <= aspect_ratio <= 1.05 else "Rectangle"
+        elif len(approx) == 5:
+            shape_name = "Pentagon"
         else:
-            prev_x, prev_y = 0, 0
+            shape_name = "Circle"
+        
+        # Draw contour and label
+        cv2.drawContours(img, [approx], -1, (0, 255, 0), 3)
+        cv2.putText(img, shape_name, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,0,0), 2)
+    
+    return img
 
-        # Combine canvas and frame
-        output = cv2.add(frame, canvas)
-        output = cv2.cvtColor(output, cv2.COLOR_BGR2RGB)
+if input_mode == "Upload Image":
+    uploaded_file = st.file_uploader("Choose an image...", type=["png","jpg","jpeg"])
+    if uploaded_file is not None:
+        # Convert to OpenCV format
+        image = Image.open(uploaded_file)
+        img = np.array(image)
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        
+        result_img = detect_shapes(img)
+        # Convert back to RGB for Streamlit display
+        result_img = cv2.cvtColor(result_img, cv2.COLOR_BGR2RGB)
+        st.image(result_img, caption="Detected Shapes", use_column_width=True)
 
-        stframe.image(output, channels="RGB", use_column_width=True)
-
+elif input_mode == "Use Webcam":
+    stframe = st.empty()
+    run = st.button("Start Webcam")
+    cap = cv2.VideoCapture(0)
+    
+    if run:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                st.warning("Failed to grab frame.")
+                break
+            frame = detect_shapes(frame)
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            stframe.image(frame, channels="RGB")
     cap.release()
-    st.success("Video processing completed!")
-else:
-    st.info("Upload a video to start drawing.")
