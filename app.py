@@ -22,8 +22,8 @@ bg_color = st.sidebar.color_picker("Canvas Background Color", "#FFFFFF")
 # --- Canvas Setup ---
 canvas_size = 500
 
-if "canvas" not in st.session_state or "history" not in st.session_state:
-    st.session_state.canvas = np.ones((canvas_size, canvas_size, 3), np.uint8) * 255
+# Initialize history if not already
+if "history" not in st.session_state:
     st.session_state.history = []
 
 # Convert hex to BGR
@@ -38,14 +38,9 @@ fill_bgr = hex_to_bgr(fill_color)
 border_bgr = hex_to_bgr(border_color)
 bg_bgr = hex_to_bgr(bg_color)
 
-# --- Initialize or Reset Canvas ---
-if "canvas_bg" not in st.session_state or st.sidebar.button("Clear Canvas", key="clear_canvas"):
-    st.session_state.canvas = np.ones((canvas_size, canvas_size, 3), np.uint8) * 255
-    st.session_state.canvas[:] = bg_bgr
-    st.session_state.history = []
-st.session_state.canvas[:] = bg_bgr
-
-canvas = st.session_state.canvas
+# Initialize canvas for this run
+canvas = np.ones((canvas_size, canvas_size, 3), np.uint8) * 255
+canvas[:] = bg_bgr  # fill background
 
 # --- Draw shape function ---
 def draw_shape_on_canvas(canvas, shape_info):
@@ -87,6 +82,7 @@ def draw_shape_on_canvas(canvas, shape_info):
 # --- Sidebar Buttons with unique keys ---
 add_shape_btn = st.sidebar.button("Add Shape", key="add_shape")
 undo_btn = st.sidebar.button("Undo Last", key="undo_last")
+clear_btn = st.sidebar.button("Clear Canvas", key="clear_canvas")
 
 # --- Handle Add Shape ---
 if add_shape_btn:
@@ -104,8 +100,11 @@ if add_shape_btn:
 if undo_btn and st.session_state.history:
     st.session_state.history.pop()
 
+# --- Handle Clear Canvas ---
+if clear_btn:
+    st.session_state.history = []
+
 # --- Redraw Canvas from History ---
-canvas[:] = bg_bgr
 for s in st.session_state.history:
     canvas = draw_shape_on_canvas(canvas, s)
 
